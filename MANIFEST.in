@@ -1,9 +1,8 @@
-global-include *.md
-global-include *.py
-global-include *.cpp
-global-include *.h
-global-include *.hpp
-global-include *.so
-global-include *.dll
-recursive-include databases *.json
-recursive-include databases *.txt
+recursive-include cpp/src *.cpp
+recursive-include cpp/include *.h *.hpp
+recursive-include cpp/pybind *.cpp
+recursive-include cpp/external *
+include cpp/CMakeLists.txt
+recursive-include src/astorum/databases *.json *.txt
+include LICENSE
+include README.md

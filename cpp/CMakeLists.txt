@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.10)
-project(core VERSION 0.2.1 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.15)
+project(core VERSION 0.2.3 LANGUAGES CXX)
 
 ##### Set default behavior #####
 set(DEFAULT_USE_OMP Yes)
@@ -16,7 +16,18 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 		message(FATAL_ERROR "g++ >= 7.0.0 is required.")
 	endif()
 
-	if("${CMAKE_HOST_SYSTEM_PROCESSOR}" MATCHES "^x86.*")
+	# Distributable wheels must target the architecture baseline, not the
+	# build machine's CPU: -march=native ties the binary to the host. It also
+	# breaks the build on GitHub Actions x86_64 runners (Sapphire Rapids),
+	# where -march=native enables AVX512FP16 and the bundled Eigen 3.4.90
+	# fails to compile (invalid static_cast from Eigen::half to _Float16 in
+	# src/Core/arch/AVX512/PacketMathFP16.h). Wheel builds via scikit-build-core
+	# (SKBUILD defined) therefore use no arch-specific flags. Local development
+	# builds keep the native flags below; pass -DOPT_FLAGS to override.
+	if(DEFINED SKBUILD)
+		set(DEFAULT_OPT_FLAGS "")
+
+	elseif("${CMAKE_HOST_SYSTEM_PROCESSOR}" MATCHES "^x86.*")
 		set(DEFAULT_OPT_FLAGS "-mtune=native -march=native -mfpmath=both")
 
 	elseif("${CMAKE_HOST_SYSTEM_PROCESSOR}" MATCHES "^arm.*")
@@ -35,9 +46,6 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 	endif()
 
 elseif (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang") OR ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang"))
-	set(DEFAULT_USE_OMP No)
-	message(WARNING, "OpenMP is not supported for clang. Do not set USE_OMP=Yes on this environment.")
-
 	if(${COVERAGE})
 		message(FATAL_ERROR "Coverage is not supported for clang. Do not set COVERAGE=Yes on this environment.")
 	endif()
@@ -130,11 +138,9 @@ if (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU") OR ("${CMAKE_CXX_COMPILER_ID}" S
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fext-numeric-literals")
 	endif()
 
-	# Enable OpenMP
-	if(USE_OMP)
- 		find_package(OpenMP QUIET REQUIRED)
-   		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-	endif()
+	# Enable OpenMP (required)
+find_package(OpenMP REQUIRED)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 
 	# Add optimisation flags
 	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${OPT_FLAGS}")
@@ -144,9 +150,6 @@ if (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU") OR ("${CMAKE_CXX_COMPILER_ID}" S
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage")
 		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
 	endif()
-
-elseif (${CMAKE_CXX_COMPILER_ID} STREQUAL "MSVC")
-	SET(CMAKE_C_COMPILER ${CMAKE_CXX_COMPILER})
 
 elseif(MSVC)
 	#Compile csim with cpp compiler since VC does not completely support C99 complex values
@@ -234,8 +237,30 @@ pybind11_add_module(core
 
 target_link_libraries(core PUBLIC pybind11::module)
 
-cmake_path(GET CMAKE_SOURCE_DIR PARENT_PATH CMAKE_SOURCE_PARENT)
+# OpenMP::OpenMP_CXX only exists when find_package(OpenMP) ran in the
+# GNU/Clang/AppleClang branch above. On MSVC, OpenMP is enabled through the
+# /openmp compile option instead and no imported target is defined, so an
+# unconditional link here would fail CMake generation on Windows.
+if(TARGET OpenMP::OpenMP_CXX)
+    target_link_libraries(core PUBLIC OpenMP::OpenMP_CXX)
+endif()
 
-install(TARGETS core
-    COMPONENT python
-    LIBRARY DESTINATION "${CMAKE_SOURCE_PARENT}/astorum")
+if(DEFINED SKBUILD)
+    # scikit-build-core: install into the astorum package directory
+    install(TARGETS core
+        COMPONENT python
+        LIBRARY DESTINATION "${SKBUILD_PLATLIB_DIR}/astorum"
+        RUNTIME DESTINATION "${SKBUILD_PLATLIB_DIR}/astorum")
+
+    # Install databases at site-packages/astorum/databases/ (read by C++ at runtime)
+    install(DIRECTORY "${CMAKE_SOURCE_DIR}/../src/astorum/databases/"
+        DESTINATION "${SKBUILD_PLATLIB_DIR}/astorum/databases"
+        COMPONENT python)
+else()
+    # Legacy setuptools-based install
+    cmake_path(GET CMAKE_SOURCE_DIR PARENT_PATH CMAKE_SOURCE_PARENT)
+
+    install(TARGETS core
+        COMPONENT python
+        LIBRARY DESTINATION "${CMAKE_SOURCE_PARENT}/astorum")
+endif()

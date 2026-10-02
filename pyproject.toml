@@ -1,0 +1,59 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "pybind11>=2.12", "wheel"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "astorum"
+version = "0.2.3"
+description = "Analytical STEM Out-of-core Resource for Unified Multimodal data"
+readme = "README.md"
+license = {text = "GPLv3"}
+authors = [
+    { name = "Sebastian Cozma", email = "sebastian.cozma@epfl.ch" },
+]
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "hyperspy>=2.0.0",
+    "exspy",
+    "dask",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=6.0"]
+
+[tool.scikit-build]
+cmake.source-dir = "cpp"
+cmake.version = ">=3.15"
+
+[tool.cibuildwheel]
+build-frontend = "build"
+# Build for CPython 3.11, 3.12, 3.13 (matches python_requires >= 3.11)
+build = "cp311-* cp312-* cp313-* cp314-*"
+# Skip musllinux, 32-bit, and uncommon architectures
+skip = "*-musllinux* *_i686 *-win32 *_ppc64le *_s390x *_riscv64"
+# Basic import smoke test
+test-command = "python -c \"import astorum; from astorum import core; print('OK')\""
+
+[[tool.cibuildwheel.overrides]]
+select = "*-macosx*"
+# Build libomp from source with the wheel's deployment target; see
+# tools/build_libomp.sh for why Homebrew is not used. Homebrew bottles target
+# the runner's macOS (currently minos 26.0) and delocate refuses to vendor
+# them into a wheel targeting macOS 11; see
+# https://cibuildwheel.pypa.io/en/stable/faq/#macos-library-dependencies-do-not-satisfy-target-macos
+environment = { MACOSX_DEPLOYMENT_TARGET = "11.0", OpenMP_ROOT = "/tmp/libomp-install" }
+before-all = "bash tools/build_libomp.sh"

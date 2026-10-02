@@ -33,6 +33,12 @@ cpp/cmake_install.cmake
 cpp/out
 cpp/install_manifest.txt
 cpp/Makefile
-astorum/__pycache__
-astorum/approximators/__pycache__
-astorum/utilities/__pycache__
+src/astorum/__pycache__
+src/astorum/approximators/__pycache__
+src/astorum/utilities/__pycache__
+
+# cibuildwheel and wheel build artifacts
+wheelhouse/
+dist/
+_skbuild/
+*.egg-info/
